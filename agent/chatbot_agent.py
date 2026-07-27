@@ -1,27 +1,19 @@
 import os
+import time
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_mistralai import ChatMistralAI
+from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from tools.product_tools import (
-    search_products,
-    get_all_products,
-    get_most_expensive_product,
-    get_cheapest_product,
-    get_products_by_price_range,
-    get_product_description
+    search_products, get_all_products, get_most_expensive_product,
+    get_cheapest_product, get_products_by_price_range, get_product_description
 )
 from tools.stock_tools import (
-    check_product_stock,
-    get_all_available_products,
-    get_out_of_stock_products
+    check_product_stock, get_all_available_products, get_out_of_stock_products
 )
-from tools.category_tools import (
-    get_all_categories,
-    get_products_by_category
-)
-from tools.info_tools import (
-    get_all_info_pages,
-    get_info_page_content
-)
+from tools.category_tools import get_all_categories, get_products_by_category
+from tools.info_tools import get_all_info_pages, get_info_page_content
 
 SYSTEM_PROMPT = """You are a professional and friendly customer service assistant for Suffelkopie, an online shop.
 
@@ -83,32 +75,113 @@ SHOP INFO:
 - Languages: German, French, English
 """
 
+TOOLS = [
+    search_products, get_all_products, get_most_expensive_product,
+    get_cheapest_product, get_products_by_price_range, get_product_description,
+    check_product_stock, get_all_available_products, get_out_of_stock_products,
+    get_all_categories, get_products_by_category,
+    get_all_info_pages, get_info_page_content
+]
+
+# ---------------------------------------------------------
+# PROVIDERS — ordre de priorité
+# ---------------------------------------------------------
+
+def get_providers():
+    providers = []
+
+    if os.getenv("GROQ_API_KEY"):
+        providers.append({
+            "name": "Groq",
+            "llm": ChatGroq(
+                model="llama-3.1-8b-instant",
+                api_key=os.getenv("GROQ_API_KEY"),
+                temperature=0
+            )
+        })
+
+    if os.getenv("GEMINI_API_KEY"):
+        providers.append({
+            "name": "Gemini",
+            "llm": ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",
+                google_api_key=os.getenv("GEMINI_API_KEY"),
+                temperature=0
+            )
+        })
+
+    if os.getenv("OPENROUTER_API_KEY"):
+        providers.append({
+            "name": "OpenRouter",
+            "llm": ChatOpenAI(
+                model="mistralai/mistral-7b-instruct",
+                api_key=os.getenv("OPENROUTER_API_KEY"),
+                base_url="https://openrouter.ai/api/v1",
+                temperature=0
+            )
+        })
+
+    if os.getenv("MISTRAL_API_KEY"):
+        providers.append({
+            "name": "Mistral",
+            "llm": ChatMistralAI(
+                model="mistral-small-latest",
+                api_key=os.getenv("MISTRAL_API_KEY"),
+                temperature=0
+            )
+        })
+
+    return providers
+
+# ---------------------------------------------------------
+# FALLBACK AGENT
+# ---------------------------------------------------------
+
+def invoke_with_fallback(messages: list) -> str:
+    """
+    Essaie chaque provider dans l'ordre.
+    Si rate limit → attend 5s et essaie le suivant.
+    Si erreur autre → essaie le suivant directement.
+    """
+    providers = get_providers()
+
+    if not providers:
+        raise ValueError("❌ Aucun provider LLM configuré dans .env !")
+
+    last_error = None
+    for provider in providers:
+        try:
+            print(f"🔄 Essai avec : {provider['name']}")
+            agent = create_react_agent(
+                model=provider["llm"],
+                tools=TOOLS,
+                prompt=SYSTEM_PROMPT
+            )
+            response = agent.invoke({"messages": messages})
+            print(f"✅ Succès avec : {provider['name']}")
+            return response["messages"][-1].content
+
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+
+            if "rate_limit" in error_str or "429" in error_str or "413" in error_str:
+                print(f"⚠️ {provider['name']} rate limit → essai suivant dans 3s...")
+                time.sleep(3)
+            else:
+                print(f"❌ {provider['name']} erreur: {str(e)[:100]} → essai suivant...")
+
+    raise Exception(f"Tous les providers ont échoué. Dernière erreur: {last_error}")
+
+# ---------------------------------------------------------
+# CREATE CHATBOT (compatibilité avec server.py)
+# ---------------------------------------------------------
+
 def create_chatbot():
-    llm = ChatGroq(
-    model="llama-3.1-8b-instant",  
-    api_key=os.getenv("GROQ_API_KEY"),
-    temperature=0
-)
-
-    tools = [
-        search_products,
-        get_all_products,
-        get_most_expensive_product,
-        get_cheapest_product,
-        get_products_by_price_range,
-        get_product_description,
-        check_product_stock,
-        get_all_available_products,
-        get_out_of_stock_products,
-        get_all_categories,
-        get_products_by_category,
-        get_all_info_pages,
-        get_info_page_content
-    ]
-
-    agent = create_react_agent(
-        model=llm,
-        tools=tools,
-        prompt=SYSTEM_PROMPT
-    )
-    return agent
+    """Retourne un objet avec méthode invoke qui utilise le fallback."""
+    class FallbackAgent:
+        def invoke(self, inputs):
+            messages = inputs.get("messages", [])
+            answer = invoke_with_fallback(messages)
+            return {"messages": [type('msg', (), {'content': answer})()]}
+    return FallbackAgent()

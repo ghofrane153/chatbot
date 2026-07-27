@@ -1,9 +1,9 @@
-import ChatWidget from "./components/ChatWidget";
+import AdminChat from "./components/AdminChat";
 
 function App() {
   return (
     <div>
-      <ChatWidget />
+      <AdminChat />
     </div>
   );
 }
