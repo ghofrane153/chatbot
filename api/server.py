@@ -24,11 +24,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://chatbot-ebon-kappa-65.vercel.app",
-        "https://chatbot-qmtpxmcmi-a-7740.vercel.app",
         "*"  # ← autorise toutes les origines Vercel
     ],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
