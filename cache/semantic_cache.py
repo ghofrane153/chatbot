@@ -2,22 +2,27 @@ import os
 import json
 import numpy as np
 from datetime import datetime
-from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
-
-load_dotenv()
 
 CACHE_FILE = "cache/cache_data.json"
-SIMILARITY_THRESHOLD = 0.95  # Score minimum pour considérer deux questions comme similaires
+SIMILARITY_THRESHOLD = 0.95
 
 class SemanticCache:
     def __init__(self):
-        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        self.cache = []  # Liste de {question, embedding, response, timestamp}
+        self.cache = []
+        self._model = None  # ← lazy loading
         self._load_from_disk()
+        print("✅ Cache initialisé (modèle chargé à la demande)")
+
+    def _get_model(self):
+        """Charge le modèle seulement quand nécessaire."""
+        if self._model is None:
+            print("🔄 Chargement du modèle embeddings...")
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+            print("✅ Modèle embeddings chargé")
+        return self._model
 
     def _load_from_disk(self):
-        """Charge le cache depuis le fichier JSON."""
         if os.path.exists(CACHE_FILE):
             try:
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -33,7 +38,6 @@ class SemanticCache:
             self.cache = []
 
     def _save_to_disk(self):
-        """Sauvegarde le cache dans le fichier JSON."""
         try:
             data = []
             for item in self.cache:
@@ -50,38 +54,29 @@ class SemanticCache:
             print(f"⚠️ Erreur sauvegarde cache: {e}")
 
     def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Calcule la similarité cosinus entre deux vecteurs."""
         return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
 
     def get(self, question: str):
-        """
-        Cherche une réponse similaire dans le cache.
-        Retourne (response, similarity_score) ou (None, 0) si pas trouvé.
-        """
         if not self.cache:
             return None, 0.0
-
-        query_embedding = self.model.encode(question)
-
+        model = self._get_model()  # ← charge seulement si nécessaire
+        query_embedding = model.encode(question)
         best_score = 0.0
         best_item = None
-
         for item in self.cache:
             score = self._cosine_similarity(query_embedding, item["embedding"])
             if score > best_score:
                 best_score = score
                 best_item = item
-
         if best_score >= SIMILARITY_THRESHOLD:
             best_item["hits"] = best_item.get("hits", 0) + 1
             self._save_to_disk()
             return best_item["response"], best_score
-
         return None, best_score
 
     def set(self, question: str, response: str):
-        """Ajoute une nouvelle entrée dans le cache."""
-        embedding = self.model.encode(question)
+        model = self._get_model()  # ← charge seulement si nécessaire
+        embedding = model.encode(question)
         self.cache.append({
             "question": question,
             "embedding": embedding,
@@ -92,7 +87,6 @@ class SemanticCache:
         self._save_to_disk()
 
     def stats(self) -> str:
-        """Retourne des statistiques sur le cache."""
         if not self.cache:
             return "Cache vide."
         total_hits = sum(item.get("hits", 0) for item in self.cache)
@@ -100,5 +94,4 @@ class SemanticCache:
                 f"{total_hits} hits total | "
                 f"Seuil similarité: {SIMILARITY_THRESHOLD}")
 
-# Instance globale unique
 semantic_cache = SemanticCache()
