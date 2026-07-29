@@ -14,4 +14,4 @@ ENV PORT=8001
 
 EXPOSE 8001
 
-CMD uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-8001} --timeout-keep-alive 300
+CMD uvicorn api.server:app --host 0.0.0.0 --port $PORT
