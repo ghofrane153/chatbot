@@ -14,23 +14,23 @@ from agent.chatbot_agent import create_chatbot
 from guardrails.input_guardrails import check_input
 from guardrails.output_guardrails import check_output
 from cache.semantic_cache import semantic_cache
-
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
 load_dotenv()
 
 app = FastAPI(title="Suffelkopie Chatbot API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "*"  # ← autorise toutes les origines Vercel
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
+@app.options("/chat")
+async def options_chat():
+    return {"status": "ok"}
 agent = create_chatbot()
 conversations = {}
 
