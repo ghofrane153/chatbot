@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 const SESSION_ID = "session_" + Math.random().toString(36).substr(2, 9);
-const API_URL = "http://localhost:8001";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
