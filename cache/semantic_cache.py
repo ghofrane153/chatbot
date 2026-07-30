@@ -5,16 +5,20 @@ from datetime import datetime
 
 CACHE_FILE = "cache/cache_data.json"
 SIMILARITY_THRESHOLD = 0.95
+CACHE_DISABLED = os.getenv("DISABLE_SEMANTIC_CACHE", "false").lower() == "true"
 
 class SemanticCache:
     def __init__(self):
         self.cache = []
-        self._model = None  # ← lazy loading
-        self._load_from_disk()
+        self._model = None
+        if not CACHE_DISABLED:
+            self._load_from_disk()
         print("✅ Cache initialisé (modèle chargé à la demande)")
 
     def _get_model(self):
         """Charge le modèle seulement quand nécessaire."""
+        if CACHE_DISABLED:
+            return None
         if self._model is None:
             print("🔄 Chargement du modèle embeddings...")
             from sentence_transformers import SentenceTransformer
@@ -38,6 +42,8 @@ class SemanticCache:
             self.cache = []
 
     def _save_to_disk(self):
+        if CACHE_DISABLED:
+            return
         try:
             data = []
             for item in self.cache:
@@ -57,9 +63,11 @@ class SemanticCache:
         return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
 
     def get(self, question: str):
+        if CACHE_DISABLED:
+            return None, 0.0
         if not self.cache:
             return None, 0.0
-        model = self._get_model()  # ← charge seulement si nécessaire
+        model = self._get_model()
         query_embedding = model.encode(question)
         best_score = 0.0
         best_item = None
@@ -75,7 +83,9 @@ class SemanticCache:
         return None, best_score
 
     def set(self, question: str, response: str):
-        model = self._get_model()  # ← charge seulement si nécessaire
+        if CACHE_DISABLED:
+            return
+        model = self._get_model()
         embedding = model.encode(question)
         self.cache.append({
             "question": question,
@@ -87,6 +97,8 @@ class SemanticCache:
         self._save_to_disk()
 
     def stats(self) -> str:
+        if CACHE_DISABLED:
+            return "📊 Cache désactivé en production."
         if not self.cache:
             return "Cache vide."
         total_hits = sum(item.get("hits", 0) for item in self.cache)
