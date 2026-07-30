@@ -7,15 +7,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from agent.chatbot_agent import create_chatbot
 from guardrails.input_guardrails import check_input
 from guardrails.output_guardrails import check_output
 from cache.semantic_cache import semantic_cache
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.cors import CORSMiddleware
+
 load_dotenv()
 
 app = FastAPI(title="Suffelkopie Chatbot API")
@@ -24,21 +22,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.options("/chat")
-async def options_chat():
-    return {"status": "ok"}
 agent = create_chatbot()
 conversations = {}
-
 LOG_FILE = "logs/chat_logs.json"
-
-# ---------------------------------------------------------
-# LOGGING
-# ---------------------------------------------------------
 
 def load_logs():
     if os.path.exists(LOG_FILE):
@@ -51,10 +41,6 @@ def save_log(entry: dict):
     logs.append(entry)
     with open(LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(logs, f, ensure_ascii=False, indent=2)
-
-# ---------------------------------------------------------
-# MODELES
-# ---------------------------------------------------------
 
 class MessageRequest(BaseModel):
     message: str
@@ -72,11 +58,7 @@ class FeedbackRequest(BaseModel):
     session_id: str
     question: str
     response: str
-    rating: str  # "positive" ou "negative"
-
-# ---------------------------------------------------------
-# ENDPOINTS
-# ---------------------------------------------------------
+    rating: str
 
 @app.get("/")
 def root():
@@ -113,7 +95,6 @@ async def chat(request: MessageRequest):
             blocked=True
         )
 
-    # 🛡️ INPUT GUARDRAIL
     input_check = check_input(question)
     if not input_check.allowed:
         save_log({
@@ -134,7 +115,6 @@ async def chat(request: MessageRequest):
             block_reason=input_check.reason
         )
 
-    # ⚡ CACHE
     cached_response, score = semantic_cache.get(question)
     if cached_response:
         save_log({
@@ -154,18 +134,16 @@ async def chat(request: MessageRequest):
             cached=True
         )
 
-    # 🤖 AGENT
     if session_id not in conversations:
-       conversations[session_id] = []
+        conversations[session_id] = []
 
     conversations[session_id].append({"role": "user", "content": question})
     if len(conversations[session_id]) > 10:
-       conversations[session_id] = conversations[session_id][-10:]
+        conversations[session_id] = conversations[session_id][-10:]
 
     try:
         response = agent.invoke({"messages": conversations[session_id]})
         raw_answer = response["messages"][-1].content
-        # 🛡️ OUTPUT GUARDRAIL
         output_check = check_output(raw_answer)
         final_answer = output_check.final_response
 
@@ -199,7 +177,6 @@ async def chat(request: MessageRequest):
 
 @app.post("/feedback")
 async def feedback(request: FeedbackRequest):
-    """Enregistre le feedback 👍/👎 du client."""
     logs = load_logs()
     for log in logs:
         if log.get("message_id") == request.message_id:
@@ -211,7 +188,6 @@ async def feedback(request: FeedbackRequest):
 
 @app.get("/logs")
 def get_logs():
-    """Retourne tous les logs pour analytics."""
     return load_logs()
 
 @app.delete("/session/{session_id}")
