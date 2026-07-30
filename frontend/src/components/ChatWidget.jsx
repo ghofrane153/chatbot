@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 const SESSION_ID = "session_" + Math.random().toString(36).substr(2, 9);
-const API_URL = "";
+const API_URL = "https://chatbot-production-4c48.up.railway.app";
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,7 +26,7 @@ export default function ChatWidget() {
 
   const sendFeedback = async (messageId, question, response, rating) => {
     try {
-      await axios.post(`/api/feedback`, {
+      await axios.post(`${API_URL}/feedback`, {
         message_id: messageId,
         session_id: SESSION_ID,
         question,
@@ -70,7 +70,7 @@ export default function ChatWidget() {
     ]);
 
     try {
-      const res = await axios.post(`/api/chat`, {
+      const res = await axios.post(`${API_URL}/chat`, {
         message: userMessage,
         session_id: SESSION_ID,
       });
