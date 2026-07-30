@@ -2,9 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 const SESSION_ID = "session_" + Math.random().toString(36).substr(2, 9);
-const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:8001"
-).replace(/\/$/, "");
+const API_URL = "";
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -28,7 +26,7 @@ export default function ChatWidget() {
 
   const sendFeedback = async (messageId, question, response, rating) => {
     try {
-      await axios.post(`${API_URL}/feedback`, {
+      await axios.post(`/api/feedback`, {
         message_id: messageId,
         session_id: SESSION_ID,
         question,
@@ -72,7 +70,7 @@ export default function ChatWidget() {
     ]);
 
     try {
-      const res = await axios.post(`${API_URL}/chat`, {
+      const res = await axios.post(`/api/chat`, {
         message: userMessage,
         session_id: SESSION_ID,
       });
